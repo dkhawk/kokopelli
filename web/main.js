@@ -140,11 +140,12 @@ function drawPath(aidStations) {
   });
   
   aidStations.forEach((station, index) => {
-    const aidMarker = document.createElement('gmp-marker-3d');
+    const aidMarker = document.createElement('gmp-marker-3d-interactive');
     aidMarker.altitudeMode = "RELATIVE_TO_GROUND";
     aidMarker.position = { lat: station.lat, lng: station.lng, altitude: 50 };
     aidMarker.extruded = true;
     aidMarker.drawsWhenOccluded = true;
+    aidMarker.label = station.name;
     
     // Basic styling for aid station markers
     if (PinElement) {
