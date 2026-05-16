@@ -214,4 +214,6 @@ button:active {
 .ctrl-btn {
   font-size: 1.2rem;
   padding: 0.2rem 0.5rem;
+  color: #f8fafc; /* Crisp white for text symbols */
+  font-weight: bold;
 }

@@ -4,21 +4,27 @@ const btnRev = document.getElementById('btn-rev');
 const btnSlower = document.getElementById('btn-slower');
 const btnFaster = document.getElementById('btn-faster');
 const speedReadout = document.getElementById('speed-readout');
+const cameraRangeSlider = document.getElementById('camera-range-slider');
 const timeEl = document.getElementById('elapsed-time');
 const distEl = document.getElementById('distance');
 const eleEl = document.getElementById('elevation');
 
 let points = [];
 let currentIndex = 0;
+let currentDistance = 0; // km
+let lastTime = 0;
 let animationId = null;
 let aidStationsList = []; // Global reference
 
 let isPlaying = false;
-let playbackSpeed = 1;
+let playbackSpeed = 1.0;
 let direction = 1;
 
+let currentCameraLat = 0;
+let currentCameraLng = 0;
 let currentCameraAltitude = 0;
 let currentCameraHeading = 45;
+let currentCameraRange = 8000;
 
 // Settings & Units
 let unitSystem = localStorage.getItem('kokopelli_units');
@@ -74,10 +80,46 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
   return (theta * toDeg + 360) % 360;
 }
 
+// Get point at exact distance along polyline
+function getInterpolatedPoint(targetDistance) {
+  if (points.length === 0) return null;
+  if (targetDistance <= points[0].distance) return points[0];
+  if (targetDistance >= points[points.length - 1].distance) return points[points.length - 1];
+  
+  for (let i = 0; i < points.length - 1; i++) {
+    if (targetDistance >= points[i].distance && targetDistance <= points[i + 1].distance) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const segmentDist = p2.distance - p1.distance;
+      if (segmentDist === 0) return p1;
+      
+      const fraction = (targetDistance - p1.distance) / segmentDist;
+      return {
+        lat: p1.lat + (p2.lat - p1.lat) * fraction,
+        lng: p1.lng + (p2.lng - p1.lng) * fraction,
+        altitude: p1.altitude + (p2.altitude - p1.altitude) * fraction,
+        distance: targetDistance
+      };
+    }
+  }
+  return points[points.length - 1];
+}
+
+// Spherical linear interpolation for heading (handles 360 wrap)
+function slerpHeading(current, target, factor) {
+  let diff = target - current;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  
+  let newHeading = current + diff * factor;
+  while (newHeading < 0) newHeading += 360;
+  return newHeading % 360;
+}
+
 // Fetch elevation from Open-Meteo if missing
 async function fetchElevationData(pts) {
   console.log("Fetching elevation data from Open-Meteo...");
-  const BATCH_SIZE = 100; // Open-Meteo limit per request
+  const BATCH_SIZE = 30; // Reduced to prevent HTTP 414 URI Too Long errors
   
   for (let i = 0; i < pts.length; i += BATCH_SIZE) {
     const batch = pts.slice(i, i + BATCH_SIZE);
@@ -412,10 +454,13 @@ function scrubTo(e) {
   currentIndex = Math.floor(pct * (points.length - 1));
   
   const point = points[currentIndex];
+  currentDistance = point.distance;
   if (marker && map3DElement) {
     marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
+    currentCameraLat = point.lat;
+    currentCameraLng = point.lng;
     currentCameraAltitude = point.altitude + 800; // Reset smoothed altitude on jump
-    map3DElement.center = { lat: point.lat, lng: point.lng, altitude: currentCameraAltitude };
+    map3DElement.center = { lat: currentCameraLat, lng: currentCameraLng, altitude: currentCameraAltitude };
   }
   updateHUD(point, points[0].time);
   drawElevationProfile();
@@ -442,15 +487,16 @@ window.addEventListener('resize', () => {
 // Playback Controls
 function updateSpeedReadout() {
   const dirStr = direction === -1 ? "-" : "";
-  speedReadout.textContent = `Speed: ${dirStr}${playbackSpeed}x`;
-  btnPlay.textContent = isPlaying ? "⏸" : "▶️";
+  speedReadout.textContent = `Speed: ${dirStr}${playbackSpeed.toFixed(1)}x`;
+  btnPlay.innerHTML = isPlaying ? "&#10074;&#10074;" : "&#9654;";
 }
 
 btnPlay.addEventListener('click', () => {
   isPlaying = !isPlaying;
   updateSpeedReadout();
   if (isPlaying) {
-    animateSimulation();
+    lastTime = 0; // Reset lastTime on play
+    animationId = requestAnimationFrame(animateSimulation);
   } else {
     cancelAnimationFrame(animationId);
   }
@@ -462,69 +508,89 @@ btnRev.addEventListener('click', () => {
 });
 
 btnSlower.addEventListener('click', () => {
-  if (playbackSpeed > 1) {
-    playbackSpeed /= 2;
-  } else if (playbackSpeed === 1) {
-    playbackSpeed = 0.5;
-  }
+  playbackSpeed = Math.max(0.1, playbackSpeed - 0.1);
   updateSpeedReadout();
 });
 
 btnFaster.addEventListener('click', () => {
-  if (playbackSpeed < 1) {
-    playbackSpeed = 1;
-  } else if (playbackSpeed < 16) {
-    playbackSpeed *= 2;
-  }
+  playbackSpeed = Math.min(5.0, playbackSpeed + 0.1);
   updateSpeedReadout();
 });
 
-function animateSimulation() {
+cameraRangeSlider.addEventListener('input', (e) => {
+  currentCameraRange = parseFloat(e.target.value);
+  if (map3DElement) {
+    map3DElement.range = currentCameraRange;
+  }
+});
+
+function animateSimulation(time) {
   if (!isPlaying) return;
+  if (!lastTime) lastTime = time;
   
-  // Jump by speed and direction
-  let step = playbackSpeed < 1 ? 1 : playbackSpeed;
-  currentIndex += step * direction;
+  const dt = (time - lastTime) / 1000; // delta time in seconds
+  lastTime = time;
   
-  if (currentIndex >= points.length) {
-    currentIndex = points.length - 1;
+  // Base speed: 5 km per simulated second at 1.0x (160km takes ~32s)
+  const baseSpeedKms = 5.0; 
+  currentDistance += baseSpeedKms * playbackSpeed * direction * dt;
+  
+  const totalDistance = points[points.length - 1].distance;
+  
+  if (currentDistance >= totalDistance) {
+    currentDistance = totalDistance;
     isPlaying = false;
     updateSpeedReadout();
-    return;
-  } else if (currentIndex < 0) {
-    currentIndex = 0;
+  } else if (currentDistance <= 0) {
+    currentDistance = 0;
     isPlaying = false;
     updateSpeedReadout();
-    return;
   }
   
-  const point = points[currentIndex];
+  // Find current point for camera and HUD
+  const point = getInterpolatedPoint(currentDistance);
+  if (!point) return;
+  
+  // Update currentIndex for the elevation progress overlay
+  currentIndex = 0;
+  while (currentIndex < points.length - 1 && points[currentIndex + 1].distance <= currentDistance) {
+    currentIndex++;
+  }
   
   if (currentCameraAltitude === 0) {
+    currentCameraLat = point.lat;
+    currentCameraLng = point.lng;
     currentCameraAltitude = point.altitude + 800;
   }
   
-  // Smooth the camera altitude to prevent vertical jitter from noisy GPS data
+  // Apply a loose "bungee" lerp to the camera's focal point.
+  // This creates a soft deadzone/hysteresis so the camera isn't jerked around 
+  // by every tiny GPS deviation, giving the marker room to move.
+  currentCameraLat += (point.lat - currentCameraLat) * 0.05;
+  currentCameraLng += (point.lng - currentCameraLng) * 0.05;
   currentCameraAltitude += ((point.altitude + 800) - currentCameraAltitude) * 0.05;
-  currentCameraHeading = (currentCameraHeading + 0.1) % 360;
+  
+  // Dynamic Follow Cam with heavily smoothed Lookahead and SLERP
+  const lookaheadSeconds = 20.0; // Much further lookahead to anticipate wide turns
+  const simSpeedMps = 150.0; 
+  const lookaheadDist = point.distance + (direction * simSpeedMps * lookaheadSeconds / 1000); // km
+  const lookaheadPos = getInterpolatedPoint(lookaheadDist);
+  
+  if (lookaheadPos) {
+    const mathHeading = calculateBearing(point.lat, point.lng, lookaheadPos.lat, lookaheadPos.lng);
+    currentCameraHeading = slerpHeading(currentCameraHeading, mathHeading, 0.015); // Heavily damp the turn rate
+  }
   
   marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
-  map3DElement.center = { lat: point.lat, lng: point.lng, altitude: currentCameraAltitude };
+  map3DElement.center = { lat: currentCameraLat, lng: currentCameraLng, altitude: currentCameraAltitude };
   map3DElement.heading = currentCameraHeading;
-  map3DElement.tilt = 67;
-  map3DElement.range = 3000;
+  map3DElement.tilt = 50; // Lowered from 65 to not be overly horizontal
+  map3DElement.range = currentCameraRange;
   
   updateHUD(point, points[0].time);
   drawElevationProfile();
   
-  // Throttle animation if playbackSpeed < 1
-  if (playbackSpeed < 1) {
-    setTimeout(() => {
-      animationId = requestAnimationFrame(animateSimulation);
-    }, 1000 / (60 * playbackSpeed));
-  } else {
-    animationId = requestAnimationFrame(animateSimulation);
-  }
+  animationId = requestAnimationFrame(animateSimulation);
 }
 
 // Settings Modal Logic

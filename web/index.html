@@ -33,10 +33,14 @@
         <div class="playback-controls-bar">
           <button id="btn-rev" class="icon-btn ctrl-btn" title="Reverse">⏪</button>
           <button id="btn-slower" class="icon-btn ctrl-btn" title="Slower">➖</button>
-          <button id="btn-play" class="icon-btn ctrl-btn" title="Play/Pause">▶️</button>
+          <button id="btn-play" class="icon-btn ctrl-btn" title="Play/Pause">▶</button>
           <button id="btn-faster" class="icon-btn ctrl-btn" title="Faster">➕</button>
         </div>
         <div id="speed-readout" style="text-align: center; margin-top: 0.5rem; font-family: monospace; color: var(--accent-color);">Speed: 1x</div>
+        <div style="margin-top: 1rem; text-align: center;">
+          <label for="camera-range-slider" style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Camera Range</label>
+          <input type="range" id="camera-range-slider" min="1000" max="50000" value="8000" style="width: 100%;">
+        </div>
       </div>
 
       <div class="overlay-panel right-panel" id="aid-info-panel" style="display: none;">
