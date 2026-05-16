@@ -98,7 +98,8 @@ function getInterpolatedPoint(targetDistance) {
         lat: p1.lat + (p2.lat - p1.lat) * fraction,
         lng: p1.lng + (p2.lng - p1.lng) * fraction,
         altitude: p1.altitude + (p2.altitude - p1.altitude) * fraction,
-        distance: targetDistance
+        distance: targetDistance,
+        time: p1.time + (p2.time - p1.time) * fraction
       };
     }
   }
@@ -526,6 +527,7 @@ cameraRangeSlider.addEventListener('input', (e) => {
 
 function animateSimulation(time) {
   if (!isPlaying) return;
+  if (points.length === 0) return; // Prevent crashes if clicked before GPX is loaded
   if (!lastTime) lastTime = time;
   
   const dt = (time - lastTime) / 1000; // delta time in seconds
