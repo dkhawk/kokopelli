@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kokopelli Live Tracker</title>
+    <link rel="stylesheet" href="/style.css" />
+    <!-- Load Google Maps API with v=alpha to support 3D Maps Web Components -->
+    <script async
+      src="https://maps.googleapis.com/maps/api/js?key=%VITE_GOOGLE_MAPS_API_KEY%&v=alpha&libraries=maps3d,marker">
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="tracker-header">
+        <h1>Kokopelli Live Tracker</h1>
+        <div class="stats">
+          <span id="elapsed-time">00:00:00</span>
+          <span id="distance">0.0 km</span>
+          <span id="elevation">Elev: 0 m</span>
+        </div>
+      </header>
+
+      <div class="map-container">
+        <!-- 3D Map Element -->
+        <gmp-map-3d id="map-3d" mode="satellite" center="44.83443,-107.85073,3000" tilt="67" range="5000" heading="45"></gmp-map-3d>
+      </div>
+      
+      <div class="overlay-panel">
+        <h2>Bighorn 52</h2>
+        <p>Simulation active...</p>
+        <button id="start-btn">Start Simulation</button>
+      </div>
+
+      <div class="overlay-panel right-panel" id="aid-info-panel" style="display: none;">
+        <h2 id="aid-name">Aid Station</h2>
+        <p id="aid-desc" class="desc">What to expect...</p>
+        <div class="aid-stats">
+          <div class="stat-row"><span>Total Distance:</span> <strong id="aid-total">0 km</strong></div>
+          <div class="stat-row"><span>From Previous:</span> <strong id="aid-prev">0 km</strong></div>
+          <div class="stat-row"><span>To Next:</span> <strong id="aid-next">0 km</strong></div>
+        </div>
+        <button id="close-aid-btn" style="margin-top: 1rem; background: var(--text-secondary);">Close</button>
+      </div>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

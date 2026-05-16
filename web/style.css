@@ -1,0 +1,145 @@
+:root {
+  --bg-color: #0f172a;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent-color: #38bdf8;
+  --panel-bg: rgba(15, 23, 42, 0.8);
+  --border-color: rgba(56, 189, 248, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+}
+
+.tracker-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem 2rem;
+  background: linear-gradient(to bottom, var(--bg-color) 0%, transparent 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.tracker-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+}
+
+.stats {
+  display: flex;
+  gap: 2rem;
+  font-family: monospace;
+  font-size: 1.2rem;
+  background: var(--panel-bg);
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
+}
+
+.map-container {
+  flex-grow: 1;
+  width: 100%;
+  height: 100%;
+}
+
+gmp-map-3d {
+  width: 100%;
+  height: 100%;
+}
+
+.overlay-panel {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  width: 300px;
+  z-index: 10;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.overlay-panel h2 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  color: var(--accent-color);
+}
+
+.overlay-panel p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+button {
+  background: var(--accent-color);
+  color: var(--bg-color);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  background: #7dd3fc;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.right-panel {
+  left: auto;
+  right: 2rem;
+}
+
+.aid-stats {
+  background: rgba(0,0,0,0.3);
+  padding: 1rem;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.desc {
+  font-style: italic;
+  line-height: 1.4;
+}
