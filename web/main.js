@@ -1,5 +1,9 @@
 const map3DElement = document.getElementById('map-3d');
-const startBtn = document.getElementById('start-btn');
+const btnPlay = document.getElementById('btn-play');
+const btnRev = document.getElementById('btn-rev');
+const btnSlower = document.getElementById('btn-slower');
+const btnFaster = document.getElementById('btn-faster');
+const speedReadout = document.getElementById('speed-readout');
 const timeEl = document.getElementById('elapsed-time');
 const distEl = document.getElementById('distance');
 const eleEl = document.getElementById('elevation');
@@ -7,6 +11,36 @@ const eleEl = document.getElementById('elevation');
 let points = [];
 let currentIndex = 0;
 let animationId = null;
+let aidStationsList = []; // Global reference
+
+let isPlaying = false;
+let playbackSpeed = 1;
+let direction = 1;
+
+// Settings & Units
+let unitSystem = localStorage.getItem('kokopelli_units');
+if (!unitSystem) {
+  const lang = navigator.language || '';
+  if (lang.startsWith('en-US') || lang.startsWith('en-LR') || lang.startsWith('en-MM')) {
+    unitSystem = 'imperial';
+  } else {
+    unitSystem = 'metric';
+  }
+}
+
+function formatDistance(km) {
+  if (unitSystem === 'imperial') {
+    return `${(km * 0.621371).toFixed(2)} mi`;
+  }
+  return `${km.toFixed(2)} km`;
+}
+
+function formatElevation(m) {
+  if (unitSystem === 'imperial') {
+    return `Elev: ${Math.round(m * 3.28084)} ft`;
+  }
+  return `Elev: ${Math.round(m)} m`;
+}
 
 // Haversine distance
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -20,9 +54,52 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// Bearing calculation for camera
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const toRad = Math.PI / 180;
+  const toDeg = 180 / Math.PI;
+  
+  const phi1 = lat1 * toRad;
+  const phi2 = lat2 * toRad;
+  const deltaLambda = (lon2 - lon1) * toRad;
+  
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) -
+            Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+            
+  const theta = Math.atan2(y, x);
+  return (theta * toDeg + 360) % 360;
+}
+
+// Fetch elevation from Open-Meteo if missing
+async function fetchElevationData(pts) {
+  console.log("Fetching elevation data from Open-Meteo...");
+  const BATCH_SIZE = 100; // Open-Meteo limit per request
+  
+  for (let i = 0; i < pts.length; i += BATCH_SIZE) {
+    const batch = pts.slice(i, i + BATCH_SIZE);
+    const lats = batch.map(p => p.lat).join(',');
+    const lons = batch.map(p => p.lng).join(',');
+    
+    try {
+      const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`);
+      const data = await res.json();
+      if (data.elevation) {
+        for (let j = 0; j < batch.length; j++) {
+          pts[i + j].altitude = data.elevation[j] || 0;
+        }
+      }
+    } catch(e) {
+      console.error("Failed to fetch elevation batch", e);
+    }
+  }
+  console.log("Elevation data fetched.");
+  drawElevationProfile();
+}
+
 async function loadGPX() {
   try {
-    const response = await fetch('/Bighorn_52_simulated.gpx');
+    const response = await fetch('/Bear_100_simulated.gpx');
     const text = await response.text();
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(text, "text/xml");
@@ -93,8 +170,22 @@ async function loadGPX() {
     
     // Sort by distance to compute next/prev
     aidStations.sort((a, b) => a.distance - b.distance);
+    aidStationsList = aidStations;
+    
+    // Check if we need to fetch elevation data (if all are 0)
+    const hasElevation = points.some(p => p.altitude > 0);
+    if (!hasElevation) {
+      fetchElevationData(points);
+    }
     
     drawPath(aidStations);
+    
+    // Initialize HUD so units and initial values are displayed correctly
+    if (points.length > 0) {
+      updateHUD(points[0], points[0].time);
+      drawElevationProfile();
+    }
+    
     console.log(`Loaded ${points.length} points and ${aidStations.length} aid stations.`);
     
   } catch(e) {
@@ -162,19 +253,19 @@ function drawPath(aidStations) {
       panel.style.display = 'block';
       nameEl.textContent = station.name;
       descEl.textContent = station.desc;
-      totalEl.textContent = `${station.distance.toFixed(2)} km`;
+      totalEl.textContent = formatDistance(station.distance);
       
       const prev = index > 0 ? aidStations[index - 1] : null;
       const next = index < aidStations.length - 1 ? aidStations[index + 1] : null;
       
       if (prev) {
-        prevEl.textContent = `${(station.distance - prev.distance).toFixed(2)} km`;
+        prevEl.textContent = formatDistance(station.distance - prev.distance);
       } else {
         prevEl.textContent = `N/A (Start)`;
       }
       
       if (next) {
-        nextEl.textContent = `${(next.distance - station.distance).toFixed(2)} km`;
+        nextEl.textContent = formatDistance(next.distance - station.distance);
       } else {
         nextEl.textContent = `N/A (Finish)`;
       }
@@ -188,6 +279,11 @@ function drawPath(aidStations) {
   });
 }
 
+const nextAidEl = document.getElementById('next-aid-status');
+const canvas = document.getElementById('elevation-canvas');
+const ctx = canvas.getContext('2d');
+let isScrubbing = false;
+
 function updateHUD(point, startTime) {
   if (!point) return;
   const elapsedMs = point.time - startTime;
@@ -196,37 +292,259 @@ function updateHUD(point, startTime) {
   const secs = Math.floor((elapsedMs % 60000) / 1000);
   
   timeEl.textContent = `${hrs.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
-  distEl.textContent = `${point.distance.toFixed(2)} km`;
-  eleEl.textContent = `Elev: ${Math.round(point.altitude)} m`;
+  distEl.textContent = formatDistance(point.distance);
+  eleEl.textContent = formatElevation(point.altitude);
+  
+  const nextAid = aidStationsList.find(s => s.distance > point.distance);
+  if (nextAid) {
+    nextAidEl.textContent = `Next: ${nextAid.name} in ${formatDistance(nextAid.distance - point.distance)}`;
+  } else {
+    nextAidEl.textContent = `Next: Finish`;
+  }
 }
 
-function animateSimulation() {
-  if (currentIndex >= points.length) {
+function drawElevationProfile() {
+  if (points.length === 0 || !canvas || !ctx) return;
+  
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  
+  if (rect.width === 0 || rect.height === 0) return;
+  
+  if (canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr)) {
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+  }
+  
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  
+  let minElev = Infinity;
+  let maxElev = -Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const alt = points[i].altitude;
+    if (alt < minElev) minElev = alt;
+    if (alt > maxElev) maxElev = alt;
+  }
+  
+  const elevRange = maxElev - minElev || 1;
+  
+  // 1. Draw Background Profile (Dimly lit)
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  for (let i = 0; i < points.length; i++) {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; // Dim grey/white
+  ctx.fill();
+  
+  // Background stroke
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i++) {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 2 * dpr;
+  ctx.stroke();
+
+  // 2. Draw Progress Overlay (Bright accent color)
+  if (currentIndex >= 0 && currentIndex < points.length) {
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i <= currentIndex; i++) {
+      const x = (i / (points.length - 1)) * w;
+      const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
+      ctx.lineTo(x, y);
+    }
+    
+    // Drop down to bottom
+    const curX = (currentIndex / (points.length - 1)) * w;
+    ctx.lineTo(curX, h);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.4)'; // Bright accent
+    ctx.fill();
+    
+    // Progress stroke
+    ctx.beginPath();
+    for (let i = 0; i <= currentIndex; i++) {
+      const x = (i / (points.length - 1)) * w;
+      const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = '#38bdf8'; // Solid accent
+    ctx.lineWidth = 2 * dpr;
+    ctx.stroke();
+    
+    // Current position marker line and dot
+    const cy = h - ((points[currentIndex].altitude - minElev) / elevRange) * h * 0.8;
+    
+    ctx.beginPath();
+    ctx.moveTo(curX, 0);
+    ctx.lineTo(curX, h);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 1 * dpr;
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.arc(curX, cy, 5 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  }
+}
+
+function scrubTo(e) {
+  if (points.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const pct = Math.max(0, Math.min(1, x / rect.width));
+  currentIndex = Math.floor(pct * (points.length - 1));
+  
+  const point = points[currentIndex];
+  if (marker && map3DElement) {
+    marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
+    map3DElement.center = { lat: point.lat, lng: point.lng, altitude: point.altitude + 500 };
+  }
+  updateHUD(point, points[0].time);
+  drawElevationProfile();
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  isScrubbing = true;
+  scrubTo(e);
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (isScrubbing) scrubTo(e);
+});
+
+window.addEventListener('mouseup', () => {
+  isScrubbing = false;
+});
+
+// Also redraw on resize
+window.addEventListener('resize', () => {
+  if (points.length > 0) drawElevationProfile();
+});
+
+// Playback Controls
+function updateSpeedReadout() {
+  const dirStr = direction === -1 ? "-" : "";
+  speedReadout.textContent = `Speed: ${dirStr}${playbackSpeed}x`;
+  btnPlay.textContent = isPlaying ? "⏸" : "▶️";
+}
+
+btnPlay.addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  updateSpeedReadout();
+  if (isPlaying) {
+    animateSimulation();
+  } else {
     cancelAnimationFrame(animationId);
+  }
+});
+
+btnRev.addEventListener('click', () => {
+  direction = direction === 1 ? -1 : 1;
+  updateSpeedReadout();
+});
+
+btnSlower.addEventListener('click', () => {
+  if (playbackSpeed > 1) {
+    playbackSpeed /= 2;
+  } else if (playbackSpeed === 1) {
+    playbackSpeed = 0.5;
+  }
+  updateSpeedReadout();
+});
+
+btnFaster.addEventListener('click', () => {
+  if (playbackSpeed < 1) {
+    playbackSpeed = 1;
+  } else if (playbackSpeed < 16) {
+    playbackSpeed *= 2;
+  }
+  updateSpeedReadout();
+});
+
+function animateSimulation() {
+  if (!isPlaying) return;
+  
+  // Jump by speed and direction
+  let step = playbackSpeed < 1 ? 1 : playbackSpeed;
+  currentIndex += step * direction;
+  
+  if (currentIndex >= points.length) {
+    currentIndex = points.length - 1;
+    isPlaying = false;
+    updateSpeedReadout();
+    return;
+  } else if (currentIndex < 0) {
+    currentIndex = 0;
+    isPlaying = false;
+    updateSpeedReadout();
     return;
   }
   
   const point = points[currentIndex];
+  const prevPoint = currentIndex > 0 ? points[currentIndex - 1] : point;
   
   marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
   map3DElement.center = { lat: point.lat, lng: point.lng, altitude: point.altitude + 500 };
-  map3DElement.heading = (map3DElement.heading + 0.1) % 360; // Slow rotation
+  map3DElement.heading = (map3DElement.heading + 0.1) % 360; // Smooth slow rotation
+  map3DElement.tilt = 67;
+  map3DElement.range = 5000;
   
   updateHUD(point, points[0].time);
+  drawElevationProfile();
   
-  // Speed up simulation: jump 10 points per frame
-  currentIndex += 10; 
-  
-  animationId = requestAnimationFrame(animateSimulation);
+  // Throttle animation if playbackSpeed < 1
+  if (playbackSpeed < 1) {
+    setTimeout(() => {
+      animationId = requestAnimationFrame(animateSimulation);
+    }, 1000 / (60 * playbackSpeed));
+  } else {
+    animationId = requestAnimationFrame(animateSimulation);
+  }
 }
 
-startBtn.addEventListener('click', () => {
-  if (points.length > 0) {
-    currentIndex = 0;
-    startBtn.textContent = "Running...";
-    startBtn.disabled = true;
-    animateSimulation();
+// Settings Modal Logic
+const settingsBtn = document.getElementById('settings-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+const unitSelect = document.getElementById('unit-select');
+
+// Initialize select to correct value
+unitSelect.value = unitSystem;
+
+settingsBtn.addEventListener('click', () => {
+  settingsPanel.style.display = 'block';
+});
+
+closeSettingsBtn.addEventListener('click', () => {
+  settingsPanel.style.display = 'none';
+});
+
+unitSelect.addEventListener('change', (e) => {
+  unitSystem = e.target.value;
+  localStorage.setItem('kokopelli_units', unitSystem);
+  
+  // Re-render HUD if point available
+  if (points.length > 0 && currentIndex < points.length) {
+    updateHUD(points[currentIndex], points[0].time);
+    drawElevationProfile();
   }
+  
+  // Note: If an aid station panel is open, it won't auto-update until re-clicked, 
+  // which is acceptable for a quick settings toggle.
 });
 
 // Wait for custom elements to be defined by Google Maps JS API

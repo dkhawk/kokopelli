@@ -18,29 +18,52 @@
           <span id="elapsed-time">00:00:00</span>
           <span id="distance">0.0 km</span>
           <span id="elevation">Elev: 0 m</span>
+          <span id="next-aid-status" style="color: var(--accent-color);">Next: N/A</span>
+          <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
         </div>
       </header>
 
       <div class="map-container">
-        <!-- 3D Map Element -->
-        <gmp-map-3d id="map-3d" mode="satellite" center="44.83443,-107.85073,3000" tilt="67" range="5000" heading="45"></gmp-map-3d>
+        <!-- 3D Map Container -->
+      <gmp-map-3d id="map-3d" mode="satellite" center="41.72852,-111.79962,3000" tilt="67" range="5000" heading="45"></gmp-map-3d>
       </div>
       
-      <div class="overlay-panel">
-        <h2>Bighorn 52</h2>
-        <p>Simulation active...</p>
-        <button id="start-btn">Start Simulation</button>
+      <div class="overlay-panel" id="control-panel">
+        <h1 style="margin-bottom: 0.5rem;">Bear 100 Telemetry</h1>
+        <div class="playback-controls-bar">
+          <button id="btn-rev" class="icon-btn ctrl-btn" title="Reverse">⏪</button>
+          <button id="btn-slower" class="icon-btn ctrl-btn" title="Slower">➖</button>
+          <button id="btn-play" class="icon-btn ctrl-btn" title="Play/Pause">▶️</button>
+          <button id="btn-faster" class="icon-btn ctrl-btn" title="Faster">➕</button>
+        </div>
+        <div id="speed-readout" style="text-align: center; margin-top: 0.5rem; font-family: monospace; color: var(--accent-color);">Speed: 1x</div>
       </div>
 
       <div class="overlay-panel right-panel" id="aid-info-panel" style="display: none;">
         <h2 id="aid-name">Aid Station</h2>
         <p id="aid-desc" class="desc">What to expect...</p>
         <div class="aid-stats">
-          <div class="stat-row"><span>Total Distance:</span> <strong id="aid-total">0 km</strong></div>
-          <div class="stat-row"><span>From Previous:</span> <strong id="aid-prev">0 km</strong></div>
-          <div class="stat-row"><span>To Next:</span> <strong id="aid-next">0 km</strong></div>
+          <div class="stat-row"><span>Total Distance:</span> <strong id="aid-total">0</strong></div>
+          <div class="stat-row"><span>From Previous:</span> <strong id="aid-prev">0</strong></div>
+          <div class="stat-row"><span>To Next:</span> <strong id="aid-next">0</strong></div>
         </div>
         <button id="close-aid-btn" style="margin-top: 1rem; background: var(--text-secondary);">Close</button>
+      </div>
+
+      <div class="overlay-panel center-panel" id="settings-panel" style="display: none;">
+        <h2>Settings</h2>
+        <div class="setting-row">
+          <label for="unit-select">Unit System</label>
+          <select id="unit-select" class="styled-select">
+            <option value="imperial">Imperial (mi, ft)</option>
+            <option value="metric">Metric (km, m)</option>
+          </select>
+        </div>
+        <button id="close-settings-btn" style="margin-top: 1rem; background: var(--text-secondary);">Close</button>
+      </div>
+
+      <div class="elevation-panel">
+        <canvas id="elevation-canvas"></canvas>
       </div>
     </div>
     <script type="module" src="/main.js"></script>
