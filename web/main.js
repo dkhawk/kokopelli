@@ -17,6 +17,9 @@ let isPlaying = false;
 let playbackSpeed = 1;
 let direction = 1;
 
+let currentCameraAltitude = 0;
+let currentCameraHeading = 45;
+
 // Settings & Units
 let unitSystem = localStorage.getItem('kokopelli_units');
 if (!unitSystem) {
@@ -411,7 +414,8 @@ function scrubTo(e) {
   const point = points[currentIndex];
   if (marker && map3DElement) {
     marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
-    map3DElement.center = { lat: point.lat, lng: point.lng, altitude: point.altitude + 500 };
+    currentCameraAltitude = point.altitude + 800; // Reset smoothed altitude on jump
+    map3DElement.center = { lat: point.lat, lng: point.lng, altitude: currentCameraAltitude };
   }
   updateHUD(point, points[0].time);
   drawElevationProfile();
@@ -495,13 +499,20 @@ function animateSimulation() {
   }
   
   const point = points[currentIndex];
-  const prevPoint = currentIndex > 0 ? points[currentIndex - 1] : point;
+  
+  if (currentCameraAltitude === 0) {
+    currentCameraAltitude = point.altitude + 800;
+  }
+  
+  // Smooth the camera altitude to prevent vertical jitter from noisy GPS data
+  currentCameraAltitude += ((point.altitude + 800) - currentCameraAltitude) * 0.05;
+  currentCameraHeading = (currentCameraHeading + 0.1) % 360;
   
   marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
-  map3DElement.center = { lat: point.lat, lng: point.lng, altitude: point.altitude + 500 };
-  map3DElement.heading = (map3DElement.heading + 0.1) % 360; // Smooth slow rotation
+  map3DElement.center = { lat: point.lat, lng: point.lng, altitude: currentCameraAltitude };
+  map3DElement.heading = currentCameraHeading;
   map3DElement.tilt = 67;
-  map3DElement.range = 5000;
+  map3DElement.range = 3000;
   
   updateHUD(point, points[0].time);
   drawElevationProfile();
