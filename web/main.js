@@ -889,9 +889,6 @@ function showDriveError(msg) {
 }
 
 async function loadDriveFile(fileId, fileName, isKML) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!apiKey) return;
-  
   const titleEl = document.querySelector('#control-panel h1');
   const prevTitle = titleEl ? titleEl.textContent : "";
   if (titleEl) {
@@ -899,7 +896,7 @@ async function loadDriveFile(fileId, fileName, isKML) {
   }
   
   try {
-    const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+    const downloadUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
     const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(downloadUrl)}`;
     
     console.log(`Fetching file ${fileName} via CORS proxy...`);
