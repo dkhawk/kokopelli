@@ -703,6 +703,32 @@ function drawElevationProfile() {
     ctx.fillStyle = '#ffffff';
     ctx.fill();
   }
+  
+  // 3. Draw POI Aid Station Dots and Faint Vertical Dashed Lines
+  const totalDist = points[points.length - 1].distance || 1;
+  aidStationsList.forEach(station => {
+    const x = (station.distance / totalDist) * w;
+    const y = h - ((station.altitude - minElev) / elevRange) * h * 0.8;
+    
+    // Draw vertical indicator line down to bottom
+    ctx.beginPath();
+    ctx.setLineDash([3 * dpr, 3 * dpr]);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, h);
+    ctx.strokeStyle = 'rgba(234, 179, 8, 0.35)'; // Soft semi-transparent yellow
+    ctx.lineWidth = 1 * dpr;
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset line dash
+    
+    // Draw the POI dot
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = '#eab308'; // Yellow matching the 3D map markers
+    ctx.strokeStyle = '#0f172a'; // Slate dark border for contrast
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.fill();
+    ctx.stroke();
+  });
 }
 
 function scrubTo(e) {
