@@ -26,6 +26,7 @@
           <span id="elapsed-time">00:00:00</span>
           <span id="distance">0.0 km</span>
           <span id="elevation">Elev: 0 m</span>
+          <span id="runner-gain" style="color: #4ade80;">Gain: +0 m</span>
           <span id="next-aid-status" style="color: var(--accent-color);">Next: N/A</span>
           <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
         </div>
@@ -48,6 +49,24 @@
         <div style="margin-top: 1rem; text-align: center;">
           <label for="camera-range-slider" style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 0.2rem;">Camera Range</label>
           <input type="range" id="camera-range-slider" min="1000" max="50000" value="8000" style="width: 100%;">
+        </div>
+        
+        <div class="course-stats-box" style="margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+          <h3 style="font-size: 0.85rem; color: var(--accent-color); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; text-align: center;">Course Profile</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; font-family: monospace; font-size: 0.85rem; text-align: center;">
+            <div>
+              <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.15rem;">Dist</div>
+              <strong id="course-total-dist">0.0 km</strong>
+            </div>
+            <div>
+              <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.15rem;">Gain</div>
+              <strong id="course-total-gain" style="color: #4ade80;">+0 m</strong>
+            </div>
+            <div>
+              <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.15rem;">Loss</div>
+              <strong id="course-total-loss" style="color: #f87171;">-0 m</strong>
+            </div>
+          </div>
         </div>
       </div>
 

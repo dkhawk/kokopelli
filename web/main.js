@@ -51,6 +51,50 @@ function formatElevation(m) {
   return `Elev: ${Math.round(m)} m`;
 }
 
+function formatElevationStat(m, prefix = "") {
+  if (unitSystem === 'imperial') {
+    return `${prefix}${Math.round(m * 3.28084)} ft`;
+  }
+  return `${prefix}${Math.round(m)} m`;
+}
+
+function computeCumulativeElevations() {
+  if (points.length === 0) return;
+  
+  let totalGain = 0;
+  let totalLoss = 0;
+  
+  points[0].cumulativeGain = 0;
+  points[0].cumulativeLoss = 0;
+  
+  for (let i = 1; i < points.length; i++) {
+    const diff = points[i].altitude - points[i - 1].altitude;
+    if (diff > 0) {
+      totalGain += diff;
+    } else {
+      totalLoss += Math.abs(diff);
+    }
+    points[i].cumulativeGain = totalGain;
+    points[i].cumulativeLoss = totalLoss;
+  }
+  
+  const totalDist = points[points.length - 1].distance;
+  
+  const courseTotalDistEl = document.getElementById('course-total-dist');
+  const courseTotalGainEl = document.getElementById('course-total-gain');
+  const courseTotalLossEl = document.getElementById('course-total-loss');
+  
+  if (courseTotalDistEl) {
+    courseTotalDistEl.textContent = formatDistance(totalDist);
+  }
+  if (courseTotalGainEl) {
+    courseTotalGainEl.textContent = formatElevationStat(totalGain, "+");
+  }
+  if (courseTotalLossEl) {
+    courseTotalLossEl.textContent = formatElevationStat(totalLoss, "-");
+  }
+}
+
 // Haversine distance
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -140,6 +184,7 @@ async function fetchElevationData(pts) {
     }
   }
   console.log("Elevation data fetched.");
+  computeCumulativeElevations();
   drawElevationProfile();
 }
 
@@ -170,8 +215,19 @@ function resetSimulation() {
   
   updateSpeedReadout();
   timeEl.textContent = "00:00:00";
-  distEl.textContent = "0.0 km";
-  eleEl.textContent = "Elev: 0 m";
+  distEl.textContent = formatDistance(0);
+  eleEl.textContent = formatElevation(0);
+  
+  const runnerGainEl = document.getElementById('runner-gain');
+  if (runnerGainEl) runnerGainEl.textContent = formatElevationStat(0, "Gain: +");
+  
+  const courseTotalDistEl = document.getElementById('course-total-dist');
+  const courseTotalGainEl = document.getElementById('course-total-gain');
+  const courseTotalLossEl = document.getElementById('course-total-loss');
+  if (courseTotalDistEl) courseTotalDistEl.textContent = formatDistance(0);
+  if (courseTotalGainEl) courseTotalGainEl.textContent = formatElevationStat(0, "+");
+  if (courseTotalLossEl) courseTotalLossEl.textContent = formatElevationStat(0, "-");
+  
   nextAidEl.textContent = "Next: N/A";
   
   const canvas = document.getElementById('elevation-canvas');
@@ -209,6 +265,8 @@ function processLoadedData(xmlDoc, isKML) {
   const hasElevation = points.some(p => p.altitude > 0);
   if (!hasElevation && points.length > 0) {
     fetchElevationData(points);
+  } else if (hasElevation && points.length > 0) {
+    computeCumulativeElevations();
   }
   
   drawPath(aidStationsList);
@@ -507,6 +565,12 @@ function updateHUD(point, startTime) {
   timeEl.textContent = `${hrs.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
   distEl.textContent = formatDistance(point.distance);
   eleEl.textContent = formatElevation(point.altitude);
+  
+  const runnerGainEl = document.getElementById('runner-gain');
+  if (runnerGainEl) {
+    const gain = point.cumulativeGain || 0;
+    runnerGainEl.textContent = formatElevationStat(gain, "Gain: +");
+  }
   
   const nextAid = aidStationsList.find(s => s.distance > point.distance);
   if (nextAid) {
@@ -825,6 +889,7 @@ unitSelect.addEventListener('change', (e) => {
   localStorage.setItem('kokopelli_units', unitSystem);
   
   if (points.length > 0 && currentIndex < points.length) {
+    computeCumulativeElevations();
     updateHUD(points[currentIndex], points[0].time);
     drawElevationProfile();
   }
