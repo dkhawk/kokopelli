@@ -830,9 +830,124 @@ unitSelect.addEventListener('change', (e) => {
   }
 });
 
+// Google Drive Integration Logic
+const driveRouteSelect = document.getElementById('drive-route-select');
+const driveStatus = document.getElementById('drive-status');
+
+async function fetchDriveFiles() {
+  const folderId = '1WAuggyzEi4x2n869lbEXZr9FFprv_0l4';
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  
+  if (!apiKey) {
+    showDriveError("No API Key configured.");
+    return;
+  }
+  
+  try {
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+trashed=false+and+(name+contains+'.gpx'+or+name+contains+'.kml')&orderBy=name&fields=files(id,name,mimeType)&key=${apiKey}`;
+    
+    const res = await fetch(listUrl);
+    
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      console.error("Drive API returned error status:", res.status, errData);
+      throw new Error(errData.error?.message || `HTTP ${res.status}`);
+    }
+    
+    const data = await res.json();
+    if (!data.files || data.files.length === 0) {
+      showDriveError("No routes found in folder.");
+      return;
+    }
+    
+    driveRouteSelect.innerHTML = `<option value="" disabled selected>Select from Drive...</option>`;
+    
+    data.files.forEach(file => {
+      const opt = document.createElement('option');
+      opt.value = file.id;
+      opt.textContent = file.name.replace(/\.(gpx|kml)$/i, '').replace(/_/g, ' ');
+      opt.dataset.isKml = file.name.toLowerCase().endsWith('.kml') ? "true" : "false";
+      opt.dataset.name = file.name;
+      driveRouteSelect.appendChild(opt);
+    });
+    
+    driveStatus.style.display = 'none';
+    driveRouteSelect.style.display = 'inline-block';
+  } catch (e) {
+    console.error("Error fetching Google Drive folder content:", e);
+    showDriveError("Drive API Error (Click to open folder)");
+  }
+}
+
+function showDriveError(msg) {
+  driveStatus.textContent = `⚠️ ${msg}`;
+  driveStatus.classList.add('error');
+  driveStatus.title = "Click to open the Google Drive folder in a new tab";
+  driveStatus.onclick = () => {
+    window.open("https://drive.google.com/drive/folders/1WAuggyzEi4x2n869lbEXZr9FFprv_0l4", "_blank");
+  };
+}
+
+async function loadDriveFile(fileId, fileName, isKML) {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return;
+  
+  const titleEl = document.querySelector('#control-panel h1');
+  const prevTitle = titleEl ? titleEl.textContent : "";
+  if (titleEl) {
+    titleEl.textContent = "Loading route from Drive...";
+  }
+  
+  try {
+    const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+    const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(downloadUrl)}`;
+    
+    console.log(`Fetching file ${fileName} via CORS proxy...`);
+    const res = await fetch(proxiedUrl);
+    
+    if (!res.ok) {
+      throw new Error(`Failed to download route (HTTP ${res.status})`);
+    }
+    
+    const text = await res.text();
+    resetSimulation();
+    
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(text, "text/xml");
+    
+    if (titleEl) {
+      let cleanName = fileName.replace(/\.(gpx|kml)$/i, '').replace(/_/g, ' ');
+      cleanName = cleanName.replace(/\b\w/g, c => c.toUpperCase());
+      titleEl.textContent = cleanName + " Telemetry";
+    }
+    
+    processLoadedData(xmlDoc, isKML);
+  } catch (e) {
+    console.error("Error downloading file from Google Drive:", e);
+    if (titleEl) {
+      titleEl.textContent = prevTitle;
+    }
+    alert(`Could not load route: ${e.message}\n\nPlease try downloading it from Drive and opening it manually using the 'Open Local' button.`);
+  }
+}
+
+if (driveRouteSelect) {
+  driveRouteSelect.addEventListener('change', (e) => {
+    const selectedOption = driveRouteSelect.options[driveRouteSelect.selectedIndex];
+    if (!selectedOption || !selectedOption.value) return;
+    
+    const fileId = selectedOption.value;
+    const fileName = selectedOption.dataset.name;
+    const isKML = selectedOption.dataset.isKml === "true";
+    
+    loadDriveFile(fileId, fileName, isKML);
+  });
+}
+
 // Wait for custom elements to be defined by Google Maps JS API
 customElements.whenDefined('gmp-map-3d').then(async () => {
   const markerLib = await google.maps.importLibrary("marker");
   PinElement = markerLib.PinElement;
   loadGPX();
+  fetchDriveFiles();
 });

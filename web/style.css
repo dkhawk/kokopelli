@@ -217,3 +217,60 @@ button:active {
   color: #f8fafc; /* Crisp white for text symbols */
   font-weight: bold;
 }
+
+/* Google Drive Selector Premium Styling */
+.drive-select-container {
+  display: flex;
+  align-items: center;
+  margin-right: 0.5rem;
+}
+
+.styled-select-drive {
+  background: rgba(15, 23, 42, 0.7);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 0.25rem 2rem 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  max-width: 170px;
+  backdrop-filter: blur(4px);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2338bdf8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 0.9rem;
+}
+
+.styled-select-drive:hover {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+  background-color: rgba(15, 23, 42, 0.85);
+}
+
+.drive-status-msg {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: inherit;
+  white-space: nowrap;
+  animation: pulse-slow 2s infinite ease-in-out;
+}
+
+.drive-status-msg.error {
+  color: #f87171;
+  animation: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.drive-status-msg.error:hover {
+  color: #fca5a5;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}

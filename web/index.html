@@ -16,7 +16,13 @@
         <h1>Kokopelli Live Tracker</h1>
         <div class="stats">
           <input type="file" id="route-file-input" accept=".gpx,.kml" style="display: none;">
-          <button id="open-route-btn" style="padding: 0.2rem 1rem; margin-right: 1rem; width: auto; font-size: 0.9rem;">Open Route</button>
+          <button id="open-route-btn" style="padding: 0.2rem 1rem; margin-right: 0.5rem; width: auto; font-size: 0.9rem;">Open Local</button>
+          <div class="drive-select-container">
+            <select id="drive-route-select" class="styled-select-drive" style="display: none;">
+              <option value="" disabled selected>Loading races...</option>
+            </select>
+            <span id="drive-status" class="drive-status-msg">☁️ Connecting Drive...</span>
+          </div>
           <span id="elapsed-time">00:00:00</span>
           <span id="distance">0.0 km</span>
           <span id="elevation">Elev: 0 m</span>
