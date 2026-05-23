@@ -143,26 +143,161 @@ async function fetchElevationData(pts) {
   drawElevationProfile();
 }
 
-async function loadGPX() {
-  try {
-    const response = await fetch('/Bear_100_simulated.gpx');
-    const text = await response.text();
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(text, "text/xml");
+function resetSimulation() {
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+  }
+  isPlaying = false;
+  
+  if (polyline) {
+    map3DElement.removeChild(polyline);
+    polyline = null;
+  }
+  if (marker) {
+    map3DElement.removeChild(marker);
+    marker = null;
+  }
+  aidMarkers.forEach(m => map3DElement.removeChild(m));
+  aidMarkers = [];
+  
+  points = [];
+  aidStationsList = [];
+  currentIndex = 0;
+  currentDistance = 0;
+  lastTime = 0;
+  currentCameraAltitude = 0; // Trigger reset
+  
+  updateSpeedReadout();
+  timeEl.textContent = "00:00:00";
+  distEl.textContent = "0.0 km";
+  eleEl.textContent = "Elev: 0 m";
+  nextAidEl.textContent = "Next: N/A";
+  
+  const canvas = document.getElementById('elevation-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+function processLoadedData(xmlDoc, isKML) {
+  if (isKML) {
+    parseKML(xmlDoc);
+  } else {
+    parseGPX(xmlDoc);
+  }
+  
+  aidStationsList.forEach(station => {
+    let minDist = Infinity;
+    let assignedDist = 0;
+    let assignedAlt = 0;
+    points.forEach(p => {
+      const d = calculateDistance(station.lat, station.lng, p.lat, p.lng);
+      if (d < minDist) {
+        minDist = d;
+        assignedDist = p.distance;
+        assignedAlt = p.altitude;
+      }
+    });
+    station.distance = assignedDist;
+    station.altitude = assignedAlt;
+  });
+  
+  aidStationsList.sort((a, b) => a.distance - b.distance);
+  
+  const hasElevation = points.some(p => p.altitude > 0);
+  if (!hasElevation && points.length > 0) {
+    fetchElevationData(points);
+  }
+  
+  drawPath(aidStationsList);
+  
+  if (points.length > 0) {
+    updateHUD(points[0], points[0].time);
+    drawElevationProfile();
+  }
+  
+  console.log(`Loaded ${points.length} points and ${aidStationsList.length} aid stations.`);
+}
+
+function parseGPX(xmlDoc) {
+  const trkpts = xmlDoc.getElementsByTagName("trkpt");
+  let totalDist = 0;
+  
+  for (let i = 0; i < trkpts.length; i++) {
+    const pt = trkpts[i];
+    const lat = parseFloat(pt.getAttribute("lat"));
+    const lon = parseFloat(pt.getAttribute("lon"));
+    const ele = pt.getElementsByTagName("ele")[0]?.textContent;
+    const time = pt.getElementsByTagName("time")[0]?.textContent;
     
-    const trkpts = xmlDoc.getElementsByTagName("trkpt");
-    let totalDist = 0;
+    if (i > 0) {
+      totalDist += calculateDistance(
+        points[i-1].lat, points[i-1].lng,
+        lat, lon
+      );
+    }
     
-    for (let i = 0; i < trkpts.length; i++) {
-      const pt = trkpts[i];
-      const lat = parseFloat(pt.getAttribute("lat"));
-      const lon = parseFloat(pt.getAttribute("lon"));
-      const ele = pt.getElementsByTagName("ele")[0]?.textContent;
-      const time = pt.getElementsByTagName("time")[0]?.textContent;
+    points.push({
+      lat: lat,
+      lng: lon,
+      altitude: parseFloat(ele) || 0,
+      time: time ? new Date(time).getTime() : 0,
+      distance: totalDist
+    });
+  }
+  
+  const wpts = xmlDoc.getElementsByTagName("wpt");
+  for (let i = 0; i < wpts.length; i++) {
+    const wpt = wpts[i];
+    const lat = parseFloat(wpt.getAttribute("lat"));
+    const lon = parseFloat(wpt.getAttribute("lon"));
+    const name = wpt.getElementsByTagName("name")[0]?.textContent || "Aid Station";
+    const desc = wpt.getElementsByTagName("desc")[0]?.textContent || "";
+    
+    if (!name.toLowerCase().includes("start") && !name.toLowerCase().includes("finish")) {
+      aidStationsList.push({
+        lat: lat,
+        lng: lon,
+        name: name,
+        desc: desc.replace(/<br\s*\/?>/gi, '\n'),
+        distance: 0
+      });
+    }
+  }
+  
+  if (points.length > 0 && points[0].time === 0) {
+    injectSyntheticTime();
+  }
+}
+
+function parseKML(xmlDoc) {
+  const coordinatesTags = xmlDoc.getElementsByTagName("coordinates");
+  let mainCoordsStr = "";
+  
+  for (let i = 0; i < coordinatesTags.length; i++) {
+    const parent = coordinatesTags[i].parentNode.nodeName;
+    if (parent === "LineString") {
+       if (coordinatesTags[i].textContent.length > mainCoordsStr.length) {
+         mainCoordsStr = coordinatesTags[i].textContent;
+       }
+    }
+  }
+  
+  const coords = mainCoordsStr.trim().split(/\s+/);
+  let totalDist = 0;
+  
+  for (let i = 0; i < coords.length; i++) {
+    const parts = coords[i].split(',');
+    if (parts.length >= 2) {
+      const lon = parseFloat(parts[0]);
+      const lat = parseFloat(parts[1]);
+      const alt = parts.length >= 3 ? parseFloat(parts[2]) : 0;
       
-      if (i > 0) {
+      if (points.length > 0) {
         totalDist += calculateDistance(
-          points[i-1].lat, points[i-1].lng,
+          points[points.length-1].lat, points[points.length-1].lng,
           lat, lon
         );
       }
@@ -170,69 +305,59 @@ async function loadGPX() {
       points.push({
         lat: lat,
         lng: lon,
-        altitude: parseFloat(ele) || 0,
-        time: new Date(time).getTime(),
+        altitude: alt,
+        time: 0,
         distance: totalDist
       });
     }
-    
-    const wpts = xmlDoc.getElementsByTagName("wpt");
-    let aidStations = [];
-    
-    for (let i = 0; i < wpts.length; i++) {
-      const wpt = wpts[i];
-      const lat = parseFloat(wpt.getAttribute("lat"));
-      const lon = parseFloat(wpt.getAttribute("lon"));
-      const name = wpt.getElementsByTagName("name")[0]?.textContent || "Aid Station";
-      const desc = wpt.getElementsByTagName("desc")[0]?.textContent || "";
-      
-      if (!name.toLowerCase().includes("start") && !name.toLowerCase().includes("finish")) {
-        aidStations.push({
-          lat: lat,
-          lng: lon,
-          name: name,
-          desc: desc.replace(/<br\s*\/?>/gi, '\n'),
-          distance: 0 // Will map to closest point
-        });
+  }
+  
+  injectSyntheticTime();
+  
+  const placemarks = xmlDoc.getElementsByTagName("Placemark");
+  for (let i = 0; i < placemarks.length; i++) {
+    const pm = placemarks[i];
+    const point = pm.getElementsByTagName("Point")[0];
+    if (point) {
+      const coordsNode = point.getElementsByTagName("coordinates")[0];
+      const nameNode = pm.getElementsByTagName("name")[0];
+      const descNode = pm.getElementsByTagName("description")[0];
+      if (coordsNode) {
+        const parts = coordsNode.textContent.trim().split(',');
+        const lon = parseFloat(parts[0]);
+        const lat = parseFloat(parts[1]);
+        const name = nameNode ? nameNode.textContent : "Waypoint";
+        const desc = descNode ? descNode.textContent : "";
+        
+        if (!name.toLowerCase().includes("start") && !name.toLowerCase().includes("finish")) {
+          aidStationsList.push({
+            lat: lat,
+            lng: lon,
+            name: name,
+            desc: desc.replace(/<br\s*\/?>/gi, '\n'),
+            distance: 0
+          });
+        }
       }
     }
+  }
+}
+
+function injectSyntheticTime() {
+  const startTime = Date.now();
+  for (let i = 0; i < points.length; i++) {
+    points[i].time = startTime + (points[i].distance / 10) * 3600000;
+  }
+}
+
+async function loadGPX() {
+  try {
+    const response = await fetch('/Bighorn_52_simulated.gpx');
+    const text = await response.text();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(text, "text/xml");
     
-    // Assign distances to aid stations based on closest track point
-    aidStations.forEach(station => {
-      let minDist = Infinity;
-      let assignedDist = 0;
-      let assignedAlt = 0;
-      points.forEach(p => {
-        const d = calculateDistance(station.lat, station.lng, p.lat, p.lng);
-        if (d < minDist) {
-          minDist = d;
-          assignedDist = p.distance;
-          assignedAlt = p.altitude;
-        }
-      });
-      station.distance = assignedDist;
-      station.altitude = assignedAlt;
-    });
-    
-    // Sort by distance to compute next/prev
-    aidStations.sort((a, b) => a.distance - b.distance);
-    aidStationsList = aidStations;
-    
-    // Check if we need to fetch elevation data (if all are 0)
-    const hasElevation = points.some(p => p.altitude > 0);
-    if (!hasElevation) {
-      fetchElevationData(points);
-    }
-    
-    drawPath(aidStations);
-    
-    // Initialize HUD so units and initial values are displayed correctly
-    if (points.length > 0) {
-      updateHUD(points[0], points[0].time);
-      drawElevationProfile();
-    }
-    
-    console.log(`Loaded ${points.length} points and ${aidStations.length} aid stations.`);
+    processLoadedData(xmlDoc, false);
     
   } catch(e) {
     console.error("Failed to load GPX", e);
@@ -605,6 +730,43 @@ const settingsPanel = document.getElementById('settings-panel');
 const closeSettingsBtn = document.getElementById('close-settings-btn');
 const unitSelect = document.getElementById('unit-select');
 
+// File Upload Logic
+const fileInput = document.getElementById('route-file-input');
+const openRouteBtn = document.getElementById('open-route-btn');
+
+if (openRouteBtn && fileInput) {
+  openRouteBtn.addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const isKML = file.name.toLowerCase().endsWith('.kml');
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      resetSimulation();
+      const text = event.target.result;
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(text, "text/xml");
+      
+      const titleEl = document.querySelector('#control-panel h1');
+      if (titleEl) {
+        let name = file.name.replace(/\.(gpx|kml)$/i, '').replace(/_/g, ' ');
+        // capitalize first letter of words
+        name = name.replace(/\b\w/g, c => c.toUpperCase());
+        titleEl.textContent = name + " Telemetry";
+      }
+      
+      processLoadedData(xmlDoc, isKML);
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset input
+  });
+}
+
 // Initialize select to correct value
 unitSelect.value = unitSystem;
 
@@ -620,14 +782,10 @@ unitSelect.addEventListener('change', (e) => {
   unitSystem = e.target.value;
   localStorage.setItem('kokopelli_units', unitSystem);
   
-  // Re-render HUD if point available
   if (points.length > 0 && currentIndex < points.length) {
     updateHUD(points[currentIndex], points[0].time);
     drawElevationProfile();
   }
-  
-  // Note: If an aid station panel is open, it won't auto-update until re-clicked, 
-  // which is acceptable for a quick settings toggle.
 });
 
 // Wait for custom elements to be defined by Google Maps JS API
