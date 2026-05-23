@@ -634,11 +634,13 @@ function drawElevationProfile() {
   
   const elevRange = maxElev - minElev || 1;
   
+  const totalDist = points[points.length - 1].distance || 1;
+
   // 1. Draw Background Profile (Dimly lit)
   ctx.beginPath();
   ctx.moveTo(0, h);
   for (let i = 0; i < points.length; i++) {
-    const x = (i / (points.length - 1)) * w;
+    const x = (points[i].distance / totalDist) * w;
     const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
     ctx.lineTo(x, y);
   }
@@ -650,7 +652,7 @@ function drawElevationProfile() {
   // Background stroke
   ctx.beginPath();
   for (let i = 0; i < points.length; i++) {
-    const x = (i / (points.length - 1)) * w;
+    const x = (points[i].distance / totalDist) * w;
     const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
@@ -664,13 +666,13 @@ function drawElevationProfile() {
     ctx.beginPath();
     ctx.moveTo(0, h);
     for (let i = 0; i <= currentIndex; i++) {
-      const x = (i / (points.length - 1)) * w;
+      const x = (points[i].distance / totalDist) * w;
       const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
       ctx.lineTo(x, y);
     }
     
     // Drop down to bottom
-    const curX = (currentIndex / (points.length - 1)) * w;
+    const curX = (points[currentIndex].distance / totalDist) * w;
     ctx.lineTo(curX, h);
     ctx.closePath();
     ctx.fillStyle = 'rgba(56, 189, 248, 0.4)'; // Bright accent
@@ -679,7 +681,7 @@ function drawElevationProfile() {
     // Progress stroke
     ctx.beginPath();
     for (let i = 0; i <= currentIndex; i++) {
-      const x = (i / (points.length - 1)) * w;
+      const x = (points[i].distance / totalDist) * w;
       const y = h - ((points[i].altitude - minElev) / elevRange) * h * 0.8;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
@@ -705,7 +707,6 @@ function drawElevationProfile() {
   }
   
   // 3. Draw POI Aid Station Dots and Faint Vertical Dashed Lines
-  const totalDist = points[points.length - 1].distance || 1;
   aidStationsList.forEach(station => {
     const x = (station.distance / totalDist) * w;
     const y = h - ((station.altitude - minElev) / elevRange) * h * 0.8;
@@ -736,7 +737,20 @@ function scrubTo(e) {
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const pct = Math.max(0, Math.min(1, x / rect.width));
-  currentIndex = Math.floor(pct * (points.length - 1));
+  
+  const totalDist = points[points.length - 1].distance || 1;
+  const targetDist = pct * totalDist;
+  
+  let bestIndex = 0;
+  let minDiff = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const diff = Math.abs(points[i].distance - targetDist);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestIndex = i;
+    }
+  }
+  currentIndex = bestIndex;
   
   const point = points[currentIndex];
   currentDistance = point.distance;
@@ -762,6 +776,43 @@ window.addEventListener('mousemove', (e) => {
 
 window.addEventListener('mouseup', () => {
   isScrubbing = false;
+});
+
+// Keyboard Fine Navigation Control
+window.addEventListener('keydown', (e) => {
+  if (points.length === 0) return;
+  
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault(); // Prevent standard page scroll
+    
+    // Auto-pause playback if active
+    if (isPlaying) {
+      isPlaying = false;
+      cancelAnimationFrame(animationId);
+      updateSpeedReadout();
+    }
+    
+    // Step index for micro-precision fine control
+    if (e.key === 'ArrowLeft') {
+      currentIndex = Math.max(0, currentIndex - 1);
+    } else {
+      currentIndex = Math.min(points.length - 1, currentIndex + 1);
+    }
+    
+    const point = points[currentIndex];
+    currentDistance = point.distance;
+    
+    if (marker && map3DElement) {
+      marker.position = { lat: point.lat, lng: point.lng, altitude: 50 };
+      currentCameraLat = point.lat;
+      currentCameraLng = point.lng;
+      currentCameraAltitude = point.altitude + 800;
+      map3DElement.center = { lat: currentCameraLat, lng: currentCameraLng, altitude: currentCameraAltitude };
+    }
+    
+    updateHUD(point, points[0].time);
+    drawElevationProfile();
+  }
 });
 
 // Also redraw on resize
