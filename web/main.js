@@ -61,7 +61,7 @@ function formatElevationStat(m, prefix = "") {
 function smoothElevations() {
   if (points.length === 0) return;
   
-  const k = 5; // Window size is 11 points (5 before, 5 after)
+  const k = 3; // Reduced from 5 to 3 (7-point window) for slightly less aggressive smoothing
   const tempAlts = points.map(p => p.altitude);
   
   for (let i = 0; i < points.length; i++) {
@@ -86,7 +86,7 @@ function computeCumulativeElevations() {
   points[0].cumulativeGain = 0;
   points[0].cumulativeLoss = 0;
   
-  const THRESHOLD = 0.5; // Ignore changes less than 50cm to filter micro-fluctuations
+  const THRESHOLD = 0.3; // Fine-tuned down from 0.5 to 0.3 meters to include slightly more minor climbs
   
   for (let i = 1; i < points.length; i++) {
     const diff = points[i].altitude - points[i - 1].altitude;
