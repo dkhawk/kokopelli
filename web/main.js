@@ -58,6 +58,25 @@ function formatElevationStat(m, prefix = "") {
   return `${prefix}${Math.round(m)} m`;
 }
 
+function smoothElevations() {
+  if (points.length === 0) return;
+  
+  const k = 5; // Window size is 11 points (5 before, 5 after)
+  const tempAlts = points.map(p => p.altitude);
+  
+  for (let i = 0; i < points.length; i++) {
+    let sum = 0;
+    let count = 0;
+    
+    for (let j = Math.max(0, i - k); j <= Math.min(points.length - 1, i + k); j++) {
+      sum += tempAlts[j];
+      count++;
+    }
+    
+    points[i].altitude = sum / count;
+  }
+}
+
 function computeCumulativeElevations() {
   if (points.length === 0) return;
   
@@ -67,12 +86,16 @@ function computeCumulativeElevations() {
   points[0].cumulativeGain = 0;
   points[0].cumulativeLoss = 0;
   
+  const THRESHOLD = 0.5; // Ignore changes less than 50cm to filter micro-fluctuations
+  
   for (let i = 1; i < points.length; i++) {
     const diff = points[i].altitude - points[i - 1].altitude;
-    if (diff > 0) {
-      totalGain += diff;
-    } else {
-      totalLoss += Math.abs(diff);
+    if (Math.abs(diff) >= THRESHOLD) {
+      if (diff > 0) {
+        totalGain += diff;
+      } else {
+        totalLoss += Math.abs(diff);
+      }
     }
     points[i].cumulativeGain = totalGain;
     points[i].cumulativeLoss = totalLoss;
@@ -184,6 +207,7 @@ async function fetchElevationData(pts) {
     }
   }
   console.log("Elevation data fetched.");
+  smoothElevations();
   computeCumulativeElevations();
   drawElevationProfile();
 }
@@ -266,6 +290,7 @@ function processLoadedData(xmlDoc, isKML) {
   if (!hasElevation && points.length > 0) {
     fetchElevationData(points);
   } else if (hasElevation && points.length > 0) {
+    smoothElevations();
     computeCumulativeElevations();
   }
   
