@@ -61,7 +61,7 @@ function formatElevationStat(m, prefix = "") {
 function smoothElevations() {
   if (points.length === 0) return;
   
-  const k = 3; // Reduced from 5 to 3 (7-point window) for slightly less aggressive smoothing
+  const k = 4; // Fine-tuned to 4 (9-point window) to perfectly balance smoothing and actual climb retention
   const tempAlts = points.map(p => p.altitude);
   
   for (let i = 0; i < points.length; i++) {
@@ -86,7 +86,7 @@ function computeCumulativeElevations() {
   points[0].cumulativeGain = 0;
   points[0].cumulativeLoss = 0;
   
-  const THRESHOLD = 0.3; // Fine-tuned down from 0.5 to 0.3 meters to include slightly more minor climbs
+  const THRESHOLD = 0.45; // Fine-tuned to 0.45 meters to suppress residual GPX noise on mountainous routes
   
   for (let i = 1; i < points.length; i++) {
     const diff = points[i].altitude - points[i - 1].altitude;
@@ -165,6 +165,8 @@ function getInterpolatedPoint(targetDistance) {
         lat: p1.lat + (p2.lat - p1.lat) * fraction,
         lng: p1.lng + (p2.lng - p1.lng) * fraction,
         altitude: p1.altitude + (p2.altitude - p1.altitude) * fraction,
+        cumulativeGain: p1.cumulativeGain + (p2.cumulativeGain - p1.cumulativeGain) * fraction,
+        cumulativeLoss: p1.cumulativeLoss + (p2.cumulativeLoss - p1.cumulativeLoss) * fraction,
         distance: targetDistance,
         time: p1.time + (p2.time - p1.time) * fraction
       };
