@@ -216,9 +216,51 @@ function processLoadedData(xmlDoc, isKML) {
   if (points.length > 0) {
     updateHUD(points[0], points[0].time);
     drawElevationProfile();
+    focusOnRoute();
   }
   
   console.log(`Loaded ${points.length} points and ${aidStationsList.length} aid stations.`);
+}
+
+function focusOnRoute() {
+  if (points.length === 0 || !map3DElement) return;
+  
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const p of points) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  }
+  
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  
+  const latDiff = maxLat - minLat;
+  const lngDiff = maxLng - minLng;
+  const maxDiff = Math.max(latDiff, lngDiff);
+  
+  // Roughly 111,000 meters per degree. Multiply by 1.5 for padding.
+  const idealRange = Math.max(5000, maxDiff * 111000 * 1.5);
+  
+  currentCameraLat = centerLat;
+  currentCameraLng = centerLng;
+  currentCameraAltitude = 1000;
+  currentCameraHeading = 0;
+  currentCameraRange = idealRange;
+  
+  map3DElement.center = { lat: centerLat, lng: centerLng, altitude: currentCameraAltitude };
+  map3DElement.heading = currentCameraHeading;
+  map3DElement.tilt = 0; // Overhead
+  map3DElement.range = currentCameraRange;
+  
+  const slider = document.getElementById('camera-range-slider');
+  if (slider) {
+    if (idealRange > parseFloat(slider.max)) {
+      slider.max = Math.ceil(idealRange / 10000) * 10000;
+    }
+    slider.value = currentCameraRange;
+  }
 }
 
 function parseGPX(xmlDoc) {
@@ -658,8 +700,8 @@ function animateSimulation(time) {
   const dt = (time - lastTime) / 1000; // delta time in seconds
   lastTime = time;
   
-  // Base speed: 5 km per simulated second at 1.0x (160km takes ~32s)
-  const baseSpeedKms = 5.0; 
+  // Base speed: 1.5 km per simulated second at 1.0x (160km takes ~106s)
+  const baseSpeedKms = 1.5; 
   currentDistance += baseSpeedKms * playbackSpeed * direction * dt;
   
   const totalDistance = points[points.length - 1].distance;
