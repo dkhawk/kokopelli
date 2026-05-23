@@ -541,12 +541,16 @@ function animateSimulation(time) {
   
   if (currentDistance >= totalDistance) {
     currentDistance = totalDistance;
-    isPlaying = false;
-    updateSpeedReadout();
+    if (direction === 1) {
+      isPlaying = false;
+      updateSpeedReadout();
+    }
   } else if (currentDistance <= 0) {
     currentDistance = 0;
-    isPlaying = false;
-    updateSpeedReadout();
+    if (direction === -1) {
+      isPlaying = false;
+      updateSpeedReadout();
+    }
   }
   
   // Find current point for camera and HUD
